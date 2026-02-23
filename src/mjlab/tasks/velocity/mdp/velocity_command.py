@@ -43,9 +43,19 @@ class UniformVelocityCommand(CommandTerm):
     self.metrics["error_vel_xy"] = torch.zeros(self.num_envs, device=self.device)
     self.metrics["error_vel_yaw"] = torch.zeros(self.num_envs, device=self.device)
 
+    self._manual_vel: torch.Tensor | None = None
+
   @property
   def command(self) -> torch.Tensor:
     return self.vel_command_b
+
+  def set_manual_override(self, lin_x: float, lin_y: float, ang_z: float) -> None:
+    """Fix the velocity command to the given values for all environments."""
+    self._manual_vel = torch.tensor([lin_x, lin_y, ang_z], device=self.device)
+
+  def clear_manual_override(self) -> None:
+    """Resume uniform random velocity sampling."""
+    self._manual_vel = None
 
   def _update_metrics(self) -> None:
     max_command_time = self.cfg.resampling_time_range[1]
@@ -98,6 +108,8 @@ class UniformVelocityCommand(CommandTerm):
       )
     standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
     self.vel_command_b[standing_env_ids, :] = 0.0
+    if self._manual_vel is not None:
+      self.vel_command_b[:] = self._manual_vel
 
   # Visualization.
 
