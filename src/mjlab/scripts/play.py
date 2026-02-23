@@ -34,6 +34,8 @@ class PlayConfig:
   video_width: int | None = None
   camera: int | str | None = None
   viewer: Literal["auto", "native", "viser"] = "auto"
+  interactive: bool = False
+  """Enable interactive velocity control (Viser: sliders; native: WASD/QE keys)."""
   no_terminations: bool = False
   """Disable all termination conditions (useful for viewing motions with dummy agents)."""
 
@@ -201,9 +203,9 @@ def run_play(task_id: str, cfg: PlayConfig):
     resolved_viewer = cfg.viewer
 
   if resolved_viewer == "native":
-    NativeMujocoViewer(env, policy).run()
+    NativeMujocoViewer(env, policy, interactive=cfg.interactive).run()
   elif resolved_viewer == "viser":
-    ViserPlayViewer(env, policy).run()
+    ViserPlayViewer(env, policy, interactive=cfg.interactive).run()
   else:
     raise RuntimeError(f"Unsupported viewer backend: {resolved_viewer}")
 
