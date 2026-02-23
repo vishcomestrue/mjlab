@@ -10,8 +10,8 @@ Added
 
 - Added ``--interactive`` flag to the ``play`` script for manual velocity control
   during inference for ``Velocity`` tasks. When enabled, the Viser viewer shows Lin X, Lin Y, and Ang Z
-  sliders with a manual-control toggle; the native viewer binds W/S (lin X),
-  arrow left/right (lin Y), Q/E (ang Z), G (zero), and V (toggle) keys. Velocity
+  sliders with a manual-control toggle; the native viewer binds I/K (lin X),
+  J/L (lin Y), U/O (ang Z), H (zero), and T (toggle) keys. Velocity
   commands revert to normal random sampling when the override is disabled.
 
 - Added ``upload_model`` option to ``RslRlBaseRunnerCfg`` to control W&B model

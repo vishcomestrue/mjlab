@@ -265,21 +265,21 @@ class NativeMujocoViewer(BaseViewer):
     from mjlab.viewer.native.keys import (
       KEY_A,
       KEY_COMMA,
-      KEY_E,
       KEY_ENTER,
       KEY_EQUAL,
-      KEY_G,
-      KEY_LEFT,
+      KEY_H,
+      KEY_I,
+      KEY_J,
+      KEY_K,
+      KEY_L,
       KEY_MINUS,
+      KEY_O,
       KEY_P,
       KEY_PERIOD,
-      KEY_Q,
       KEY_R,
-      KEY_RIGHT,
-      KEY_S,
       KEY_SPACE,
-      KEY_V,
-      KEY_W,
+      KEY_T,
+      KEY_U,
     )
 
     if key == KEY_ENTER:
@@ -302,21 +302,21 @@ class NativeMujocoViewer(BaseViewer):
       self.request_action("TOGGLE_SHOW_ALL_ENVS", "TOGGLE_SHOW_ALL_ENVS")
 
     if self.interactive:
-      if key == KEY_W:
+      if key == KEY_I:
         self.request_action("CUSTOM", "VEL_LIN_X_POS")
-      elif key == KEY_S:
+      elif key == KEY_K:
         self.request_action("CUSTOM", "VEL_LIN_X_NEG")
-      elif key == KEY_RIGHT:
-        self.request_action("CUSTOM", "VEL_LIN_Y_NEG")
-      elif key == KEY_LEFT:
+      elif key == KEY_J:
         self.request_action("CUSTOM", "VEL_LIN_Y_POS")
-      elif key == KEY_Q:
+      elif key == KEY_L:
+        self.request_action("CUSTOM", "VEL_LIN_Y_NEG")
+      elif key == KEY_U:
         self.request_action("CUSTOM", "VEL_ANG_Z_POS")
-      elif key == KEY_E:
+      elif key == KEY_O:
         self.request_action("CUSTOM", "VEL_ANG_Z_NEG")
-      elif key == KEY_G:
+      elif key == KEY_H:
         self.request_action("CUSTOM", "VEL_ZERO")
-      elif key == KEY_V:
+      elif key == KEY_T:
         self.request_action("CUSTOM", "VEL_TOGGLE")
 
     if self.user_key_callback:
