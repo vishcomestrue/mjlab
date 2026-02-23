@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
+from typing import Any
 
 import viser
 from typing_extensions import override
@@ -27,13 +28,16 @@ class ViserPlayViewer(BaseViewer):
     env: EnvProtocol,
     policy: PolicyProtocol,
     frame_rate: float = 60.0,
+    interactive: bool = False,
     verbosity: VerbosityLevel = VerbosityLevel.SILENT,
   ) -> None:
     super().__init__(env, policy, frame_rate, verbosity)
+    self.interactive = interactive
     self._reward_plotter: ViserTermPlotter | None = None
     self._metrics_plotter: ViserTermPlotter | None = None
     self._sim_lock = Lock()
     self._camera_viewers: list[ViserCameraViewer] = []
+    self._vel_terms: list[Any] = []
 
   @override
   def setup(self) -> None:
@@ -151,6 +155,16 @@ class ViserPlayViewer(BaseViewer):
             self._server, term_names, name="Metric"
           )
 
+    # Velocity control tab.
+    if self.interactive:
+      self._vel_terms = [
+        t
+        for t in self.env.unwrapped.command_manager._terms.values()
+        if hasattr(t, "set_manual_override")
+      ]
+      if self._vel_terms:
+        self._setup_velocity_control(tabs)
+
     # Groups tab (geoms and sites).
     self._scene.create_groups_gui(tabs)
 
@@ -262,6 +276,92 @@ class ViserPlayViewer(BaseViewer):
   def is_running(self) -> bool:
     """Check if viewer is running."""
     return True  # Viser runs until process is killed.
+
+  def _setup_velocity_control(self, tabs: Any) -> None:
+    # Derive slider bounds from the first term's config ranges if available.
+    term = self._vel_terms[0]
+    if hasattr(term, "cfg") and hasattr(term.cfg, "ranges"):
+      r = term.cfg.ranges
+      lx_range = r.lin_vel_x
+      ly_range = r.lin_vel_y
+      az_range = r.ang_vel_z
+    else:
+      lx_range = (-1.0, 1.0)
+      ly_range = (-1.0, 1.0)
+      az_range = (-1.0, 1.0)
+
+    with tabs.add_tab("Velocity", icon=viser.Icon.ARROWS_MOVE):
+      # Enable / disable toggle.
+      enable_cb = self._server.gui.add_checkbox("Manual control", initial_value=True)
+      for term in self._vel_terms:
+        term.set_manual_override(0.0, 0.0, 0.0)
+
+      # Lin X / Lin Y sliders.
+      slider_x = self._server.gui.add_slider(
+        "Lin X",
+        min=lx_range[0],
+        max=lx_range[1],
+        step=0.1,
+        initial_value=0.0,
+        hint="Commanded linear velocity along X (forward/back).",
+      )
+      slider_y = self._server.gui.add_slider(
+        "Lin Y",
+        min=ly_range[0],
+        max=ly_range[1],
+        step=0.1,
+        initial_value=0.0,
+        hint="Commanded linear velocity along Y (left/right).",
+      )
+
+      # Ang Z slider.
+      slider_z = self._server.gui.add_slider(
+        "Ang Z",
+        min=az_range[0],
+        max=az_range[1],
+        step=0.1,
+        initial_value=0.0,
+        hint="Commanded angular velocity about Z (yaw).",
+      )
+
+      def _push_vel() -> None:
+        if enable_cb.value:
+          for term in self._vel_terms:
+            term.set_manual_override(
+              float(slider_x.value),
+              float(slider_y.value),
+              float(slider_z.value),
+            )
+
+      @slider_x.on_update
+      def _(_) -> None:
+        _push_vel()
+
+      @slider_y.on_update
+      def _(_) -> None:
+        _push_vel()
+
+      @slider_z.on_update
+      def _(_) -> None:
+        _push_vel()
+
+      @enable_cb.on_update
+      def _(_) -> None:
+        if enable_cb.value:
+          _push_vel()
+        else:
+          for term in self._vel_terms:
+            term.clear_manual_override()
+
+      # Zero button.
+      zero_btn = self._server.gui.add_button("Zero")
+
+      @zero_btn.on_click
+      def _(_) -> None:
+        slider_x.value = 0.0
+        slider_y.value = 0.0
+        slider_z.value = 0.0
+        _push_vel()
 
   def _update_status_display(self) -> None:
     """Update the HTML status display."""
