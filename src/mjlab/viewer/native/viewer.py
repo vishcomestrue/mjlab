@@ -6,7 +6,7 @@ import math
 from collections import deque
 from dataclasses import dataclass
 from threading import Lock
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import mujoco
 import mujoco.viewer
@@ -53,11 +53,13 @@ class NativeMujocoViewer(BaseViewer):
     key_callback: Optional[Callable[[int], None]] = None,
     plot_cfg: PlotCfg | None = None,
     enable_perturbations: bool = True,
+    interactive: bool = False,
     verbosity: VerbosityLevel = VerbosityLevel.SILENT,
   ):
     super().__init__(env, policy, frame_rate, verbosity)
     self.user_key_callback = key_callback
     self.enable_perturbations = enable_perturbations
+    self.interactive = interactive
 
     self.mjm: Optional[mujoco.MjModel] = None
     self.mjd: Optional[mujoco.MjData] = None
@@ -76,6 +78,10 @@ class NativeMujocoViewer(BaseViewer):
     self._show_debug_vis: bool = True
     self._show_all_envs: bool = False
     self._plot_cfg = plot_cfg or PlotCfg()
+
+    self._vel_terms: list[Any] = []
+    self._vel_cmd: list[float] = [0.0, 0.0, 0.0]
+    self._vel_override: bool = False
 
     self.env_idx = self.cfg.env_idx
     self._mj_lock = Lock()
@@ -100,6 +106,16 @@ class NativeMujocoViewer(BaseViewer):
       )
     ]
     self._init_reward_plots(self._term_names)
+
+    if self.interactive:
+      self._vel_terms = [
+        t
+        for t in self.env.unwrapped.command_manager._terms.values()
+        if hasattr(t, "set_manual_override")
+      ]
+      if self._vel_terms:
+        self._vel_override = True
+        self._apply_vel_override()
 
     assert self.mjm is not None
     assert self.mjd is not None
@@ -152,6 +168,10 @@ class NativeMujocoViewer(BaseViewer):
         f"{self._time_multiplier * 100:.1f}%\n"
         f"{self._smoothed_fps:.1f}"
       )
+      if self.interactive and self._vel_override:
+        lx, ly, az = self._vel_cmd
+        text_1 += "\nVelCmd"
+        text_2 += f"\n{lx:.2f} {ly:.2f} {az:.2f}"
       overlay = (
         mujoco.mjtFontScale.mjFONTSCALE_150.value,
         mujoco.mjtGridPos.mjGRID_TOPLEFT.value,
@@ -234,18 +254,32 @@ class NativeMujocoViewer(BaseViewer):
     super().reset_environment()
     self._clear_histories()
 
+  _VEL_STEP = 0.1  # Velocity increment per keypress.
+
+  def _apply_vel_override(self) -> None:
+    for term in self._vel_terms:
+      term.set_manual_override(*self._vel_cmd)
+
   def _safe_key_callback(self, key: int) -> None:
     """Runs on MuJoCo viewer thread; must not touch env/sim directly."""
     from mjlab.viewer.native.keys import (
       KEY_A,
       KEY_COMMA,
+      KEY_E,
       KEY_ENTER,
       KEY_EQUAL,
+      KEY_G,
+      KEY_LEFT,
       KEY_MINUS,
       KEY_P,
       KEY_PERIOD,
+      KEY_Q,
       KEY_R,
+      KEY_RIGHT,
+      KEY_S,
       KEY_SPACE,
+      KEY_V,
+      KEY_W,
     )
 
     if key == KEY_ENTER:
@@ -266,6 +300,24 @@ class NativeMujocoViewer(BaseViewer):
       self.request_action("TOGGLE_DEBUG_VIS", "TOGGLE_DEBUG_VIS")
     elif key == KEY_A:
       self.request_action("TOGGLE_SHOW_ALL_ENVS", "TOGGLE_SHOW_ALL_ENVS")
+
+    if self.interactive:
+      if key == KEY_W:
+        self.request_action("CUSTOM", "VEL_LIN_X_POS")
+      elif key == KEY_S:
+        self.request_action("CUSTOM", "VEL_LIN_X_NEG")
+      elif key == KEY_RIGHT:
+        self.request_action("CUSTOM", "VEL_LIN_Y_NEG")
+      elif key == KEY_LEFT:
+        self.request_action("CUSTOM", "VEL_LIN_Y_POS")
+      elif key == KEY_Q:
+        self.request_action("CUSTOM", "VEL_ANG_Z_POS")
+      elif key == KEY_E:
+        self.request_action("CUSTOM", "VEL_ANG_Z_NEG")
+      elif key == KEY_G:
+        self.request_action("CUSTOM", "VEL_ZERO")
+      elif key == KEY_V:
+        self.request_action("CUSTOM", "VEL_TOGGLE")
 
     if self.user_key_callback:
       try:
@@ -304,6 +356,46 @@ class NativeMujocoViewer(BaseViewer):
           self._show_all_envs = not self._show_all_envs
           self.log(
             f"[INFO] Show all envs {'enabled' if self._show_all_envs else 'disabled'}",
+            VerbosityLevel.INFO,
+          )
+          return True
+        elif payload == "VEL_LIN_X_POS":
+          self._vel_cmd[0] = round(self._vel_cmd[0] + self._VEL_STEP, 2)
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_LIN_X_NEG":
+          self._vel_cmd[0] = round(self._vel_cmd[0] - self._VEL_STEP, 2)
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_LIN_Y_POS":
+          self._vel_cmd[1] = round(self._vel_cmd[1] + self._VEL_STEP, 2)
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_LIN_Y_NEG":
+          self._vel_cmd[1] = round(self._vel_cmd[1] - self._VEL_STEP, 2)
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_ANG_Z_POS":
+          self._vel_cmd[2] = round(self._vel_cmd[2] + self._VEL_STEP, 2)
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_ANG_Z_NEG":
+          self._vel_cmd[2] = round(self._vel_cmd[2] - self._VEL_STEP, 2)
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_ZERO":
+          self._vel_cmd = [0.0, 0.0, 0.0]
+          self._apply_vel_override()
+          return True
+        elif payload == "VEL_TOGGLE":
+          self._vel_override = not self._vel_override
+          if self._vel_override:
+            self._apply_vel_override()
+          else:
+            for term in self._vel_terms:
+              term.clear_manual_override()
+          self.log(
+            f"[INFO] Velocity override {'enabled' if self._vel_override else 'disabled'}",
             VerbosityLevel.INFO,
           )
           return True
