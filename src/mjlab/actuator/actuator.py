@@ -48,9 +48,18 @@ class ActuatorCfg(ABC):
   Also known as dry friction or load-independent friction.
   """
 
+  joint_damping: float = 0.0
+  """Passive joint damping coefficient (Nm·s/rad).
+
+  This is the MuJoCo joint-level damping, distinct from the PD derivative gain.
+  It applies a velocity-proportional resistive torque directly on the joint,
+  independent of the actuator control law.
+  """
+
   def __post_init__(self) -> None:
     assert self.armature >= 0.0, "armature must be non-negative."
     assert self.frictionloss >= 0.0, "frictionloss must be non-negative."
+    assert self.joint_damping >= 0.0, "joint_damping must be non-negative."
     if self.transmission_type == TransmissionType.SITE:
       if self.armature > 0.0 or self.frictionloss > 0.0:
         raise ValueError(
