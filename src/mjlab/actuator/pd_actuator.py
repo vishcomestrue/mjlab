@@ -62,6 +62,7 @@ class IdealPdActuator(Actuator, Generic[IdealPdCfgT]):
         effort_limit=self.cfg.effort_limit,
         armature=self.cfg.armature,
         frictionloss=self.cfg.frictionloss,
+        joint_damping=self.cfg.joint_damping,
         transmission_type=self.cfg.transmission_type,
       )
       self._mjs_actuators.append(actuator)
@@ -101,7 +102,25 @@ class IdealPdActuator(Actuator, Generic[IdealPdCfgT]):
     computed_torques = self.stiffness * pos_error
     computed_torques += self.damping * vel_error
     computed_torques += cmd.effort_target
-
+    
+    # For Dynamixel MX64, at 12V, using the official curve from the website, we can write the equation as
+    # w (rad/s) = w (rpm) * 2 * pi / 60 
+    # Therefore w (rad/s) = 63 * 2 * pi / 60 = 6.6 rad/s
+    # tau_limit = 6.0 * (1 - (abs(cmd.vel) / 6.6))
+    # tau_limit = torch.clamp(tau_limit, min=0.0)
+    # Now you can use this tau_limit to be clipped or clamped
+    
+    # The following way failed to learn, when the robot does contract, it is not able to retract by generating torque in opposite direction
+    # tau_limit = 6.0 * (1 - (torch.abs(cmd.vel) / 6.6))
+    # tau_limit = torch.clamp(tau_limit, min=0.0)
+    # self.force_limit = tau_limit
+    
+    # New method, by checking the direction of velocity and torque
+    driving = (computed_torques * cmd.vel) > 0                                                                                                                                                                                               
+    tau_limit_driving = torch.clamp(6.0 * (1 - torch.abs(cmd.vel) / 6.6), min=0.0)                                                                                                                                                           
+    tau_limit = torch.where(driving, tau_limit_driving, torch.full_like(tau_limit_driving, 6.0))                                                                                                                                             
+    self.force_limit = tau_limit
+    
     return self._clip_effort(computed_torques)
 
   def _clip_effort(self, effort: torch.Tensor) -> torch.Tensor:
