@@ -194,6 +194,36 @@ def run_play(task_id: str, cfg: PlayConfig):
     )
     policy = runner.get_inference_policy(device=device)
 
+  # [POSE-LOG] Zero actions for 200 steps to let robot settle, then log pose + height.
+  # _orig_policy = policy
+  # _settle_steps = 200
+
+  # class _PoseLoggingPolicy:
+  #   def __call__(self, obs: torch.Tensor) -> torch.Tensor:
+  #     step = env.unwrapped.episode_length_buf[0].item()
+  #     if step == 0:
+  #       robot = env.unwrapped.scene["robot"]
+  #       foot_z = robot.data.site_pos_w[0, :, 2].cpu().numpy()
+  #       print(f"\n[POSE-LOG] Foot Z at spawn (step 0): {foot_z}")
+  #       print(f"  spawn_base_height: {robot.data.root_link_pos_w[0, 2].item():.4f} m")
+  #       print(f"  => correct spawn height = current - min(foot_z) = "
+  #             f"{robot.data.root_link_pos_w[0, 2].item() - float(foot_z.min()):.4f} m")
+  #     if step == _settle_steps:
+  #       robot = env.unwrapped.scene["robot"]
+  #       joint_pos = robot.data.joint_pos[0].cpu().numpy()
+  #       joint_names = robot.joint_names
+  #       base_height = robot.data.root_link_pos_w[0, 2].item()
+  #       print(f"\n[POSE-LOG] Settled pose after {_settle_steps} zero-action steps")
+  #       print(f"  base_height: {base_height:.4f} m")
+  #       for _name, _val in zip(joint_names, joint_pos):
+  #         print(f"  {_name}: {_val:.4f} rad")
+  #     if step < _settle_steps:
+  #       return torch.zeros(env.unwrapped.action_space.shape, device=device)
+  #     return _orig_policy(obs)
+
+  # policy = _PoseLoggingPolicy()
+  # [/POSE-LOG]
+
   # Handle "auto" viewer selection.
   if cfg.viewer == "auto":
     has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
