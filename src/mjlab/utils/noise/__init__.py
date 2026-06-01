@@ -1,3 +1,5 @@
+from mjlab.utils.noise.imu_freeze import ImuFreezeGroupNoiseCfg as ImuFreezeGroupNoiseCfg
+from mjlab.utils.noise.imu_freeze import ImuFreezeGroupNoiseModel as ImuFreezeGroupNoiseModel
 from mjlab.utils.noise.noise_cfg import ConstantNoiseCfg as ConstantNoiseCfg
 from mjlab.utils.noise.noise_cfg import GaussianNoiseCfg as GaussianNoiseCfg
 from mjlab.utils.noise.noise_cfg import NoiseCfg as NoiseCfg

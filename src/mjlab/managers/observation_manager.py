@@ -11,6 +11,7 @@ from prettytable import PrettyTable
 from mjlab.managers.manager_base import ManagerBase, ManagerTermBaseCfg
 from mjlab.utils.buffers import CircularBuffer, DelayBuffer
 from mjlab.utils.noise import noise_cfg, noise_model
+from mjlab.utils.noise.imu_freeze import ImuFreezeGroupNoiseCfg, ImuFreezeGroupNoiseModel
 from mjlab.utils.noise.noise_cfg import NoiseCfg, NoiseModelCfg
 
 
@@ -88,6 +89,10 @@ class ObservationGroupCfg:
   """Whether to apply noise corruption to observations. Set to True during
   training for domain randomization, False during evaluation."""
 
+  imu_noise_model: ImuFreezeGroupNoiseCfg | None = None
+  """Group-level IMU freeze/dropout/spike noise applied after per-term noise.
+  Gated by enable_corruption. Only the actor group should set this."""
+
   history_length: int | None = None
   """Group-level history length override. If set, applies to all terms in
   this group. If None, each term uses its own ``history_length`` setting."""
@@ -122,6 +127,7 @@ class ObservationManager(ManagerBase):
 
   def __init__(self, cfg: dict[str, ObservationGroupCfg], env):
     self.cfg = deepcopy(cfg)
+    self._imu_group_noise_instances: dict[str, ImuFreezeGroupNoiseModel] = {}
     super().__init__(env=env)
 
     self._group_obs_dim: dict[str, tuple[int, ...] | list[tuple[int, ...]]] = dict()
@@ -255,6 +261,9 @@ class ObservationManager(ManagerBase):
           )
     for mod in self._group_obs_class_instances.values():
       mod.reset(env_ids=env_ids)
+    for imu_model in self._imu_group_noise_instances.values():
+      batch_ids = None if isinstance(env_ids, slice) else env_ids
+      imu_model.reset(batch_ids)
     return {}
 
   def _check_and_handle_nans(
@@ -359,6 +368,10 @@ class ObservationManager(ManagerBase):
           group_obs[term_name] = circular_buffer.buffer
       else:
         group_obs[term_name] = obs
+
+    # Group-level IMU freeze/dropout/spike noise (training only).
+    if group_cfg.enable_corruption and group_name in self._imu_group_noise_instances:
+      group_obs = self._imu_group_noise_instances[group_name](group_obs)
 
     # Final NaN check for non-per-term checking.
     if not group_cfg.nan_check_per_term and group_cfg.nan_policy != "disabled":
@@ -483,3 +496,9 @@ class ObservationManager(ManagerBase):
         self._group_obs_term_dim[group_name].append(obs_dims[1:])
       self._group_obs_term_delay_buffer[group_name] = group_entry_delay_buffer
       self._group_obs_term_history_buffer[group_name] = group_entry_history_buffer
+      if group_cfg.imu_noise_model is not None:
+        self._imu_group_noise_instances[group_name] = ImuFreezeGroupNoiseModel(
+          group_cfg.imu_noise_model,
+          num_envs=self._env.num_envs,
+          device=self._env.device,
+        )
